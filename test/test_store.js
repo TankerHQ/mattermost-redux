@@ -33,7 +33,15 @@ export default async function testConfigureStore(preloadedState) {
         },
     };
 
-    const store = configureStore(preloadedState, {}, offlineConfig, () => ({}), {enableBuffer: false});
+    // Turn off Tanker for tests
+    let tankerOffState = preloadedState;
+    if (tankerOffState) {
+        tankerOffState.entities.general = {tanker: {enabled: false}};
+    } else {
+        tankerOffState = {entities: {general: {tanker: {enabled: false}}}};
+    }
+
+    const store = configureStore(tankerOffState, {}, offlineConfig, () => ({}), {enableBuffer: false});
 
     const wait = () => new Promise((resolve) => setTimeout(resolve), 300); //eslint-disable-line
     await wait();

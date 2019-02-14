@@ -212,6 +212,10 @@ export default class Client4 {
         return `${this.getOAuthAppsRoute()}/${appId}`;
     }
 
+    getTankerIdentityRoute() {
+        return `${this.getBaseRoute()}/tankeridentity`;
+    }
+
     getEmojisRoute() {
         return `${this.getBaseRoute()}/emoji`;
     }
@@ -1972,6 +1976,13 @@ export default class Client4 {
         return this.doFetch(
             `${this.getBaseRoute()}/actions/dialogs/submit`,
             {method: 'post', body: JSON.stringify(data)},
+        );
+    };
+
+    getTankerIdentity = async () => {
+        return this.doFetch(
+            `${this.getTankerIdentityRoute()}`,
+            {method: 'get'}
         );
     };
 

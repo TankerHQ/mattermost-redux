@@ -2,6 +2,8 @@
 // See LICENSE.txt for license information.
 // @flow
 
+import Tanker from '@tanker/client-browser';
+
 export type GeneralState = {|
     appState: boolean,
     credentials: Object,
@@ -10,5 +12,9 @@ export type GeneralState = {|
     deviceToken: string,
     license: Object,
     serverVersion: string,
-    timezones: Array<string>
+    timezones: Array<string>,
+    tanker: {
+        enabled: boolean,
+        instance: Tanker,
+    },
 |};
