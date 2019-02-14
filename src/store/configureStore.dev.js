@@ -23,7 +23,6 @@ const devToolsEnhancer = (
 );
 
 import serviceReducer from 'reducers';
-import deepFreezeAndThrowOnMutation from 'utils/deep_freeze';
 import initialState from './initial_state';
 import {offlineConfig, createReducer} from './helpers';
 import {createMiddleware} from './middleware';
@@ -87,17 +86,5 @@ export default function configureServiceStore(preloadedState, appReducer, userOf
 }
 
 function createDevReducer(baseState, ...reducers) {
-    return enableFreezing(createReducer(baseState, ...reducers));
-}
-
-function enableFreezing(reducer) {
-    return (state, action) => {
-        const nextState = reducer(state, action);
-
-        if (nextState !== state) {
-            deepFreezeAndThrowOnMutation(nextState);
-        }
-
-        return nextState;
-    };
+    return createReducer(baseState, ...reducers);
 }

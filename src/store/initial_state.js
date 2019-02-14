@@ -2,6 +2,9 @@
 // See LICENSE.txt for license information.
 // @flow
 
+import Tanker from '@tanker/client-browser';
+import {tankerConfig} from 'actions/tanker';
+
 import type {GlobalState} from 'types/store';
 
 const state: GlobalState = {
@@ -15,6 +18,10 @@ const state: GlobalState = {
             license: {},
             serverVersion: '',
             timezones: [],
+            tanker: {
+                enabled: true,
+                instance: new Tanker(tankerConfig),
+            },
         },
         users: {
             currentUserId: '',

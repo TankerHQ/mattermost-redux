@@ -14,6 +14,7 @@ import {getAllCustomEmojis} from 'actions/emojis';
 import {getClientConfig} from 'actions/general';
 import {getMyTeams, getMyTeamMembers, getMyTeamUnreads} from 'actions/teams';
 import {loadRolesIfNeeded} from 'actions/roles';
+import {openTanker, closeTanker, updateTankerPassword} from 'actions/tanker';
 
 import {
     getUserIdFromChannelName,
@@ -103,7 +104,7 @@ export function login(loginId: string, password: string, mfaToken: string = '', 
             return {error};
         }
 
-        return completeLogin(data)(dispatch, getState);
+        return completeLogin(data, password)(dispatch, getState);
     };
 }
 
@@ -127,11 +128,11 @@ export function loginById(id: string, password: string, mfaToken: string = ''): 
             return {error};
         }
 
-        return completeLogin(data)(dispatch, getState);
+        return completeLogin(data, password)(dispatch, getState);
     };
 }
 
-function completeLogin(data: UserProfile): ActionFunc {
+function completeLogin(data: UserProfile, password: string): ActionFunc {
     return async (dispatch: DispatchFunc, getState: GetStateFunc) => {
         dispatch({
             type: UserTypes.RECEIVED_ME,
@@ -169,6 +170,7 @@ function completeLogin(data: UserProfile): ActionFunc {
             dispatch(getMyTeams()),
             dispatch(getClientConfig()),
             dispatch(getMyTermsOfServiceStatus()),
+            dispatch(openTanker(password)),
         ];
 
         const serverVersion = Client4.getServerVersion();
@@ -229,6 +231,7 @@ export function loadMe(): ActionFunc {
             dispatch(getMyTeams()),
             dispatch(getMyTeamMembers()),
             dispatch(getMyTeamUnreads()),
+            dispatch(openTanker()),
         ];
 
         if (config.EnableCustomTermsOfService === 'true') {
@@ -252,6 +255,7 @@ export function loadMe(): ActionFunc {
 
 export function logout(): ActionFunc {
     return async (dispatch: DispatchFunc, getState: GetStateFunc) => {
+        await closeTanker(getState);
         dispatch({type: UserTypes.LOGOUT_REQUEST, data: null}, getState);
 
         try {
@@ -1009,6 +1013,7 @@ export function updateUserPassword(userId: string, currentPassword: string, newP
     return async (dispatch: DispatchFunc, getState: GetStateFunc) => {
         try {
             await Client4.updateUserPassword(userId, currentPassword, newPassword);
+            await updateTankerPassword(getState, newPassword);
         } catch (error) {
             dispatch(logError(error));
             return {error};

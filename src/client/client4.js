@@ -212,6 +212,10 @@ export default class Client4 {
         return `${this.getOAuthAppsRoute()}/${appId}`;
     }
 
+    getUserTokenRoute() {
+        return `${this.getBaseRoute()}/usertoken`;
+    }
+
     getEmojisRoute() {
         return `${this.getBaseRoute()}/emoji`;
     }
@@ -1954,6 +1958,13 @@ export default class Client4 {
         return this.doFetch(
             `${this.getBaseRoute()}/actions/dialogs/submit`,
             {method: 'post', body: JSON.stringify(data)},
+        );
+    };
+
+    getUserToken = async () => {
+        return this.doFetch(
+            `${this.getUserTokenRoute()}`,
+            {method: 'get'}
         );
     };
 

@@ -92,6 +92,10 @@ function serverVersion(state = '', action) {
     }
 }
 
+function tanker(state = null) {
+    return state;
+}
+
 export default combineReducers({
     appState,
     credentials,
@@ -101,4 +105,5 @@ export default combineReducers({
     license,
     serverVersion,
     timezones,
+    tanker,
 });
