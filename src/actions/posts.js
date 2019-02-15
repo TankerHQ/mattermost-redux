@@ -14,11 +14,12 @@ import {getConfig} from 'selectors/entities/general';
 
 import {parseNeededCustomEmojisFromText} from 'utils/emoji_utils';
 
-import {bindClientFunc, forceLogoutIfNecessary} from './helpers';
+import {requestData, forceLogoutIfNecessary} from './helpers';
 import {logError} from './errors';
 import {deletePreferences, savePreferences} from './preferences';
 import {getProfilesByIds, getProfilesByUsernames, getStatusesByIds} from './users';
 import {systemEmojis, getCustomEmojiByName, getCustomEmojisByName} from './emojis';
+import {encodeMessage, decodePosts, decodePost} from './tanker';
 
 export function getPost(postId) {
     return async (dispatch, getState) => {
@@ -36,17 +37,18 @@ export function getPost(postId) {
             return {error};
         }
 
+        const clearPost = decodePost(post);
         dispatch(batchActions([
             {
                 type: PostTypes.RECEIVED_POST,
-                data: post,
+                data: clearPost,
             },
             {
                 type: PostTypes.GET_POSTS_SUCCESS,
             },
         ]));
 
-        return {data: post};
+        return {data: clearPost};
     };
 }
 
@@ -97,7 +99,10 @@ export function createPost(post, files = []) {
             },
             meta: {
                 offline: {
-                    effect: () => Client4.createPost({...newPost, create_at: 0}),
+                    effect: async () => {
+                        const encryptedMessage = await encodeMessage(dispatch, getState, newPost.message, newPost.channel_id);
+                        return Client4.createPost({...newPost, message: encryptedMessage, props: {encrypted: true}, create_at: 0});
+                    },
                     commit: (success, payload) => {
                         // Use RECEIVED_POSTS to clear pending and sending posts
                         const actions = [{
@@ -105,7 +110,7 @@ export function createPost(post, files = []) {
                             data: {
                                 order: [],
                                 posts: {
-                                    [payload.id]: payload,
+                                    [payload.id]: {...payload, message: newPost.message},
                                 },
                             },
                             channelId: payload.channel_id,
@@ -176,6 +181,8 @@ export function createPostImmediately(post, files = []) {
             update_at: timestamp,
         };
 
+        const encryptedMessage = await encodeMessage(dispatch, getState, newPost.message, newPost.channel_id);
+
         if (files.length) {
             const fileIds = files.map((file) => file.id);
 
@@ -200,7 +207,7 @@ export function createPostImmediately(post, files = []) {
         });
 
         try {
-            const created = await Client4.createPost({...newPost, create_at: 0});
+            const created = await Client4.createPost({...newPost, message: encryptedMessage, props: {encrypted: true}, create_at: 0});
             newPost.id = created.id;
         } catch (error) {
             forceLogoutIfNecessary(error, dispatch, getState);
@@ -283,15 +290,35 @@ export function deletePost(post) {
 }
 
 export function editPost(post) {
-    return bindClientFunc({
-        clientFunc: Client4.patchPost,
-        onRequest: PostTypes.EDIT_POST_REQUEST,
-        onSuccess: [PostTypes.RECEIVED_POST, PostTypes.EDIT_POST_SUCCESS],
-        onFailure: PostTypes.EDIT_POST_FAILURE,
-        params: [
-            post,
-        ],
-    });
+    return async (dispatch, getState) => {
+        dispatch(requestData(PostTypes.EDIT_POST_REQUEST), getState);
+
+        const encryptedMessage = await encodeMessage(dispatch, getState, post.message, post.channel_id);
+
+        let data = null;
+        try {
+            data = await Client4.patchPost({...post, message: encryptedMessage, props: {encrypted: true}});
+            data.message = post.message;
+        } catch (error) {
+            forceLogoutIfNecessary(error, dispatch, getState);
+            const actions = [logError(error)];
+            actions.push({type: PostTypes.EDIT_POST_FAILURE, error});
+            dispatch(batchActions(actions));
+            return {error};
+        }
+
+        const actions = [{type: PostTypes.RECEIVED_POST, data}];
+        actions.push({type: PostTypes.EDIT_POST_SUCCESS, data});
+        dispatch(batchActions(actions));
+
+        return {data};
+    };
+}
+
+export function decryptPost(post) {
+    return async (dispatch, getState) => {
+        return decodePost(getState, post);
+    };
 }
 
 export function pinPost(postId) {
@@ -521,10 +548,11 @@ export function getPostThread(postId, skipAddToChannel = true) {
 
         const post = posts.posts[postId];
 
+        const clearPosts = await decodePosts(getState, posts);
         dispatch(batchActions([
             {
                 type: PostTypes.RECEIVED_POSTS,
-                data: posts,
+                data: clearPosts,
                 channelId: post.channel_id,
                 skipAddToChannel,
             },
@@ -533,7 +561,7 @@ export function getPostThread(postId, skipAddToChannel = true) {
             },
         ], 'BATCH_GET_POST_THREAD'), getState);
 
-        return {data: posts};
+        return {data: clearPosts};
     };
 }
 
@@ -548,7 +576,10 @@ export function getPostThreadWithRetry(postId) {
             data: {},
             meta: {
                 offline: {
-                    effect: () => Client4.getPostThread(postId),
+                    effect: async () => {
+                        const payload = await Client4.getPostThread(postId);
+                        return decodePosts(getState, payload);
+                    },
                     commit: (success, payload) => {
                         const {posts} = payload;
                         const post = posts[postId];
@@ -601,13 +632,14 @@ export function getPosts(channelId, page = 0, perPage = Posts.POST_CHUNK_SIZE) {
             return {error};
         }
 
+        const clearPosts = await decodePosts(getState, posts);
         dispatch({
             type: PostTypes.RECEIVED_POSTS,
-            data: posts,
+            data: clearPosts,
             channelId,
         });
 
-        return {data: posts};
+        return {data: clearPosts};
     };
 }
 
@@ -618,11 +650,13 @@ export function getPostsWithRetry(channelId, page = 0, perPage = Posts.POST_CHUN
             data: {},
             meta: {
                 offline: {
-                    effect: () => Client4.getPosts(channelId, page, perPage),
+                    effect: async () => {
+                        const payload = await Client4.getPosts(channelId, page, perPage);
+                        return decodePosts(getState, payload);
+                    },
                     commit: (success, payload) => {
                         const {posts} = payload;
                         getProfilesAndStatusesForPosts(posts, dispatch, getState);
-
                         dispatch(batchActions([
                             {
                                 type: PostTypes.RECEIVED_POSTS,
@@ -665,10 +699,11 @@ export function getPostsSince(channelId, since) {
             return {error};
         }
 
+        const clearPosts = await decodePosts(getState, posts);
         dispatch(batchActions([
             {
                 type: PostTypes.RECEIVED_POSTS,
-                data: posts,
+                data: clearPosts,
                 channelId,
             },
             {
@@ -676,7 +711,7 @@ export function getPostsSince(channelId, since) {
             },
         ]));
 
-        return {data: posts};
+        return {data: clearPosts};
     };
 }
 
@@ -687,7 +722,10 @@ export function getPostsSinceWithRetry(channelId, since) {
             data: {},
             meta: {
                 offline: {
-                    effect: () => Client4.getPostsSince(channelId, since),
+                    effect: async () => {
+                        const payload = await Client4.getPostsSince(channelId, since);
+                        return decodePosts(getState, payload);
+                    },
                     commit: (success, payload) => {
                         const {posts} = payload;
                         getProfilesAndStatusesForPosts(posts, dispatch, getState);
@@ -734,13 +772,14 @@ export function getPostsBefore(channelId, postId, page = 0, perPage = Posts.POST
             return {error};
         }
 
+        const clearPosts = await decodePosts(getState, posts);
         dispatch({
             type: PostTypes.RECEIVED_POSTS,
-            data: posts,
+            data: clearPosts,
             channelId,
         });
 
-        return {data: posts};
+        return {data: clearPosts};
     };
 }
 
@@ -751,7 +790,10 @@ export function getPostsBeforeWithRetry(channelId, postId, page = 0, perPage = P
             data: {},
             meta: {
                 offline: {
-                    effect: () => Client4.getPostsBefore(channelId, postId, page, perPage),
+                    effect: async () => {
+                        const payload = await Client4.getPostsBefore(channelId, postId, page, perPage);
+                        return decodePosts(getState, payload);
+                    },
                     commit: (success, payload) => {
                         const {posts} = payload;
                         getProfilesAndStatusesForPosts(posts, dispatch, getState);
@@ -793,13 +835,14 @@ export function getPostsAfter(channelId, postId, page = 0, perPage = Posts.POST_
             return {error};
         }
 
+        const clearPosts = await decodePosts(getState, posts);
         dispatch({
             type: PostTypes.RECEIVED_POSTS,
-            data: posts,
+            data: clearPosts,
             channelId,
         });
 
-        return {data: posts};
+        return {data: clearPosts};
     };
 }
 
@@ -810,7 +853,10 @@ export function getPostsAfterWithRetry(channelId, postId, page = 0, perPage = Po
             data: {},
             meta: {
                 offline: {
-                    effect: () => Client4.getPostsAfter(channelId, postId, page, perPage),
+                    effect: async () => {
+                        const payload = await Client4.getPostsAfter(channelId, postId, page, perPage);
+                        return decodePosts(getState, payload);
+                    },
                     commit: (success, payload) => {
                         const {posts} = payload;
                         getProfilesAndStatusesForPosts(posts, dispatch, getState);

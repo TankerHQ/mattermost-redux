@@ -1182,12 +1182,12 @@ export default class Client4 {
         );
     };
 
-    createGroupChannel = async (userIds) => {
+    createGroupChannel = async (userIds, tankerGroupId) => {
         this.trackEvent('api', 'api_channels_create_group');
 
         return this.doFetch(
             `${this.getChannelsRoute()}/group`,
-            {method: 'post', body: JSON.stringify(userIds)}
+            {method: 'post', body: JSON.stringify({userIds, tanker_group_id: tankerGroupId})}
         );
     };
 
