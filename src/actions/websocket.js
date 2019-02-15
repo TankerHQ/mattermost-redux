@@ -41,6 +41,8 @@ import {
 
 import {getTeam, getTeams, getMyTeams, getMyTeamMembers, getMyTeamUnreads} from './teams';
 
+import {decodePosts, decodePost} from './tanker';
+
 import {
     ChannelTypes,
     GeneralTypes,
@@ -360,9 +362,10 @@ function handleNewPostEvent(msg) {
                     dispatch(getStatusesByIds([rootUserId]));
                 }
 
+                const clearData = await decodePosts(getState, data);
                 dispatch({
                     type: PostTypes.RECEIVED_POSTS,
-                    data,
+                    clearData,
                     channelId: post.channel_id,
                 }, getState);
             }
@@ -385,10 +388,11 @@ function handleNewPostEvent(msg) {
                 dispatch(makeGroupMessageVisibleIfNecessary(post.channel_id));
             }
 
+            const clearPost = await decodePost(getState, post);
             actions.push({
                 type: PostTypes.RECEIVED_NEW_POST,
                 data: {
-                    ...post,
+                    ...clearPost,
                 },
             });
         }

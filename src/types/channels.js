@@ -40,6 +40,7 @@ export type Channel = {|
     teammate_id?: string,
     status?: string,
     fake?: boolean,
+    tanker_group_id?: string,
 |};
 
 export type ChannelMembership = {|
