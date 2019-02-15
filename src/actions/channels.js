@@ -15,6 +15,7 @@ import {logError} from './errors';
 import {bindClientFunc, forceLogoutIfNecessary} from './helpers';
 import {getMissingProfilesByIds} from './users';
 import {loadRolesIfNeeded} from './roles';
+import {createGroup, updateChannelGroup} from './tanker';
 
 import type {ActionFunc, DispatchFunc, GetStateFunc} from 'types/actions';
 import type {Channel, ChannelNotifyProps, ChannelMembership} from 'types/channels';
@@ -31,6 +32,9 @@ export function createChannel(channel: Channel, userId: string): ActionFunc {
     return async (dispatch, getState) => {
         let created;
         try {
+            const currentUserId = getState().entities.users.currentUserId;
+            const groupId = await createGroup(getState, [currentUserId]);
+            channel.tanker_group_id = groupId;
             created = await Client4.createChannel(channel);
         } catch (error) {
             forceLogoutIfNecessary(error, dispatch, getState);
@@ -84,7 +88,8 @@ export function createDirectChannel(userId: string, otherUserId: string): Action
 
         let created;
         try {
-            created = await Client4.createDirectChannel([userId, otherUserId]);
+            const groupId = await createGroup(getState, [userId, otherUserId]);
+            created = await Client4.createDirectChannel([userId, otherUserId], groupId);
         } catch (error) {
             forceLogoutIfNecessary(error, dispatch, getState);
             dispatch(batchActions([
@@ -161,7 +166,8 @@ export function createGroupChannel(userIds: Array<string>): ActionFunc {
 
         let created;
         try {
-            created = await Client4.createGroupChannel(userIds);
+            const groupId = await createGroup(getState, userIds);
+            created = await Client4.createGroupChannel(userIds, groupId);
         } catch (error) {
             forceLogoutIfNecessary(error, dispatch, getState);
             dispatch(batchActions([
@@ -610,6 +616,22 @@ export function leaveChannel(channelId: string): ActionFunc {
     };
 }
 
+async function updateChannelMembers(dispatch: DispatchFunc, getState: GetStateFunc, channelId: string, toAddUserIds: Array<string>) {
+    if (!getState().entities.general.tanker.enabled) {
+        return;
+    }
+
+    try {
+        const channel = await Client4.getChannel(channelId);
+        await getChannelMembers(channel.id)(dispatch, getState);
+        var updatedchannel = await updateChannelGroup(getState, channel, toAddUserIds);
+        await updateChannel(updatedchannel);
+    } catch (error) {
+        forceLogoutIfNecessary(error, dispatch, getState);
+        dispatch(logError(error));
+    }
+}
+
 export function joinChannel(userId: string, teamId: string, channelId: string, channelName: string): ActionFunc {
     return async (dispatch, getState) => {
         let member: ?ChannelMembership;
@@ -623,6 +645,7 @@ export function joinChannel(userId: string, teamId: string, channelId: string, c
                 if ((channel.type === General.GM_CHANNEL) || (channel.type === General.DM_CHANNEL)) {
                     member = await Client4.getChannelMember(channel.id, userId);
                 } else {
+                    await updateChannelMembers(dispatch, getState, channel.id, [userId]);
                     member = await Client4.addToChannel(userId, channel.id);
                 }
             }
@@ -970,6 +993,8 @@ export function getChannelStats(channelId: string): ActionFunc {
 
 export function addChannelMember(channelId: string, userId: string, postRootId: string = ''): ActionFunc {
     return async (dispatch, getState) => {
+        await updateChannelMembers(dispatch, getState, channelId, [userId]);
+
         let member;
         try {
             member = await Client4.addToChannel(userId, channelId, postRootId);

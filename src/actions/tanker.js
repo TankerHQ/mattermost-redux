@@ -2,13 +2,16 @@
 // See LICENSE.txt for license information.
 // @flow
 
-import Tanker from '@tanker/client-browser';
+import Tanker, {toBase64, fromBase64} from '@tanker/client-browser';
 
 import {batchActions} from 'redux-batched-actions';
+import {updateChannel, getChannelMembers} from 'actions/channels';
 import {Client4} from 'client';
 import {UserTypes} from 'action_types';
 
 import type {ActionFunc, DispatchFunc, GetStateFunc} from 'types/actions';
+import type {Channel} from 'types/channels';
+import type {Post} from 'types/posts';
 
 export const tankerConfig = {
     trustchainId: 'mQ2X4rM+UWVVg2eC6aTh0nf8knWFI1Yg7JxaB0U2p94=',
@@ -46,6 +49,140 @@ export function openTanker(password: ?string): ActionFunc {
         }
         return {data: true};
     };
+}
+
+export async function createGroup(getState: GetStateFunc, channelMembers: Array<string>) {
+    const tankerState = getState().entities.general.tanker;
+    if (!tankerState.enabled) {
+        return '';
+    }
+    const tanker = tankerState.instance;
+    const publicIdentities = await Client4.getTankerPublicIdentities(channelMembers);
+    return tanker.createGroup(publicIdentities);
+}
+
+export async function addMemberToChannelGroup(dispatch: DispatchFunc, getState: GetStateFunc, channelId: string, toAddUserId: string) {
+    const tankerState = getState().entities.general.tanker;
+    if (!tankerState.enabled) {
+        return;
+    }
+    const tanker = tankerState.instance;
+
+    const channel = getState().entities.channels.channels[channelId];
+    if (!channel.tanker_group_id) {
+        await createChannelGroup(dispatch, getState, channelId);
+    }
+    const publicIdentities = await Client4.getTankerPublicIdentities([toAddUserId]);
+    await tanker.updateGroupMembers(channel.tanker_group_id, {usersToAdd: publicIdentities});
+}
+
+export async function inviteToTeamChannels(getState: GetStateFunc, userIds: Array<string>, publicProvisionalIdentities: Array<string>) {
+    const tankerState = getState().entities.general.tanker;
+    if (!tankerState.enabled) {
+        return;
+    }
+    const tanker = tankerState.instance;
+
+    const teams = await Client4.getMyTeams();
+
+    const teamChannels = await Promise.all(teams.map((team) => Client4.getMyChannels(team.id)));
+    const channels = teamChannels.reduce((acc, val) => acc.concat(val), []);
+
+    let publicIdentities = await Client4.getTankerPublicIdentities(userIds);
+    if (publicIdentities) {
+        publicIdentities = publicIdentities.concat(publicProvisionalIdentities);
+    } else {
+        publicIdentities = publicProvisionalIdentities;
+    }
+
+    const promises = channels.filter((channel) => channel.type === 'O').map(async (channel) => {
+        return tanker.updateGroupMembers(channel.tanker_group_id, {usersToAdd: publicIdentities});
+    });
+
+    await Promise.all(promises);
+}
+
+export async function createTeamChannelsGroups(dispatch: DispatchFunc, getState: GetStateFunc, teamId: string) {
+    const tankerState = getState().entities.general.tanker;
+    if (!tankerState.enabled) {
+        return;
+    }
+
+    const teamChannels = await Client4.getMyChannels(teamId);
+    const channels = teamChannels.reduce((acc, val) => acc.concat(val), []);
+
+    const promises = channels.map(async (channel) => {
+        createChannelGroup(dispatch, getState, channel.id);
+    });
+
+    await Promise.all(promises);
+}
+
+function getMembersList(members) {
+    const results = [];
+    Object.keys(members).forEach((member) => {
+        if (typeof member === 'string') {
+            results.push(member);
+        } else if (member.user_id) {
+            results.push(member.user_id);
+        }
+    });
+    return results;
+}
+
+async function createChannelGroup(dispatch: DispatchFunc, getState: GetStateFunc, channelId: string) {
+    // make sure the channel is up to date
+    const channel = await Client4.getChannel(channelId);
+    await getChannelMembers(channelId)(dispatch, getState);
+
+    const members = getState().entities.channels.membersInChannel[channelId];
+
+    channel.tanker_group_id = await createGroup(getState, getMembersList(members));
+    await updateChannel(channel)(dispatch, getState);
+}
+
+export async function encodeMessage(dispatch: DispatchFunc, getState: GetStateFunc, message: string, channelId: string) {
+    const state = getState();
+    const tankerState = state.entities.general.tanker;
+    if (!tankerState.enabled) {
+        return message;
+    }
+    const tanker = tankerState.instance;
+    const channel = state.entities.channels.channels[channelId];
+
+    if (!channel.tanker_group_id) {
+        await createChannelGroup(dispatch, getState, channelId);
+    }
+
+    const encryptedData = await tanker.encrypt(message, {shareWithGroups: [channel.tanker_group_id]});
+    return toBase64(encryptedData);
+}
+
+export async function decodePosts(getState: GetStateFunc, data: Object): Promise<Object> {
+    const clearPosts = {};
+
+    const promises = Object.entries(data.posts).map(async ([id, p]) => {
+        const post = ((p: any): Post);
+        clearPosts[id] = await decodePost(getState, post);
+    });
+
+    await Promise.all(promises);
+
+    return {...data, posts: clearPosts};
+}
+
+export async function decodePost(getState: GetStateFunc, post: Post) {
+    const tankerState = getState().entities.general.tanker;
+    if (!tankerState.enabled) {
+        return post;
+    }
+    const tanker = tankerState.instance;
+    try {
+        const clearMessage = await tanker.decrypt(fromBase64(post.message));
+        return {...post, message: clearMessage};
+    } catch (e) {
+        return post;
+    }
 }
 
 export async function closeTanker(getState: GetStateFunc) {

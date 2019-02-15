@@ -14,7 +14,7 @@ import {getAllCustomEmojis} from 'actions/emojis';
 import {getClientConfig} from 'actions/general';
 import {getMyTeams, getMyTeamMembers, getMyTeamUnreads} from 'actions/teams';
 import {loadRolesIfNeeded} from 'actions/roles';
-import {openTanker, closeTanker, updateTankerPassword} from 'actions/tanker';
+import {openTanker, closeTanker, updateTankerPassword, updateOpenChannels} from 'actions/tanker';
 
 import {
     getUserIdFromChannelName,
@@ -108,7 +108,7 @@ export function login(loginId: string, password: string, mfaToken: string = '', 
     };
 }
 
-export function loginById(id: string, password: string, mfaToken: string = ''): ActionFunc {
+export function loginById(id: string, password: string, mfaToken: string = '', isAccountCreation: boolean = false): ActionFunc {
     return async (dispatch: DispatchFunc, getState: GetStateFunc) => {
         dispatch({type: UserTypes.LOGIN_REQUEST, data: null}, getState);
 
@@ -128,11 +128,11 @@ export function loginById(id: string, password: string, mfaToken: string = ''): 
             return {error};
         }
 
-        return completeLogin(data, password)(dispatch, getState);
+        return completeLogin(data, password, isAccountCreation)(dispatch, getState);
     };
 }
 
-function completeLogin(data: UserProfile, password: string): ActionFunc {
+function completeLogin(data: UserProfile, password: string, isAccountCreation: boolean = false): ActionFunc {
     return async (dispatch: DispatchFunc, getState: GetStateFunc) => {
         dispatch({
             type: UserTypes.RECEIVED_ME,
@@ -179,6 +179,9 @@ function completeLogin(data: UserProfile, password: string): ActionFunc {
 
         try {
             await Promise.all(promises);
+            if (isAccountCreation) {
+                await updateOpenChannels(getState);
+            }
         } catch (error) {
             dispatch(batchActions([
                 {type: UserTypes.LOGIN_FAILURE, error},

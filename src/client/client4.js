@@ -1181,21 +1181,21 @@ export default class Client4 {
         );
     };
 
-    createDirectChannel = async (userIds) => {
+    createDirectChannel = async (userIds, tankerGroupId) => {
         this.trackEvent('api', 'api_channels_create_direct');
 
         return this.doFetch(
             `${this.getChannelsRoute()}/direct`,
-            {method: 'post', body: JSON.stringify(userIds)}
+            {method: 'post', body: JSON.stringify({user_ids: userIds, tanker_group_id: tankerGroupId})}
         );
     };
 
-    createGroupChannel = async (userIds) => {
+    createGroupChannel = async (userIds, tankerGroupId) => {
         this.trackEvent('api', 'api_channels_create_group');
 
         return this.doFetch(
             `${this.getChannelsRoute()}/group`,
-            {method: 'post', body: JSON.stringify(userIds)}
+            {method: 'post', body: JSON.stringify({user_ids: userIds, tanker_group_id: tankerGroupId})}
         );
     };
 
