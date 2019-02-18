@@ -28,7 +28,7 @@ async function handleTankerError(dispatch: DispatchFunc, getState: GetStateFunc,
     ]), getState);
 }
 
-export function openTanker(password: ?string): ActionFunc {
+export function openTanker(email: ?string, password: ?string): ActionFunc {
     return async (dispatch: DispatchFunc, getState: GetStateFunc) => {
         const tankerState = getState().entities.general.tanker;
         if (!tankerState.enabled) {
@@ -53,8 +53,9 @@ export function openTanker(password: ?string): ActionFunc {
             try {
                 await tanker.open(token.user_id, token.token);
 
-                if (!await tanker.isUnlockAlreadySetUp()) {
-                    await tanker.setupUnlock({password});
+                if (!tanker.hasRegisteredUnlockMethod('email') ||
+                    !tanker.hasRegisteredUnlockMethod('password')) {
+                    await tanker.registerUnlock({email, password});
                 }
             } catch (error) {
                 handleTankerError(dispatch, getState, tanker, error);
@@ -181,5 +182,20 @@ export async function updateTankerPassword(getState: GetStateFunc, newPassword: 
         return;
     }
     const tanker = tankerState.instance;
-    await tanker.updateUnlock({password: newPassword});
+    await tanker.registerUnlock({password: newPassword});
+}
+
+export async function unlockAndUpdatePassword(getState: GetStateFunc, userId: string, userToken: string, verificationCode: string, newPassword: string) {
+    const tankerState = getState().entities.general.tanker;
+    if (!tankerState.enabled) {
+        return;
+    }
+    const tanker = tankerState.instance;
+
+    tanker.on('unlockRequired', async () => {
+        await tanker.unlockCurrentDevice({verificationCode});
+    });
+    await tanker.open(userId, userToken);
+    await tanker.registerUnlock({password: newPassword});
+    await tanker.close();
 }
