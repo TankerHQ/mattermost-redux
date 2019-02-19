@@ -101,7 +101,7 @@ export function createPost(post, files = []) {
             },
             meta: {
                 offline: {
-                    effect: () => Client4.createPost({...newPost, message: encryptedMessage, create_at: 0}),
+                    effect: () => Client4.createPost({...newPost, message: encryptedMessage, props: {encrypted: true}, create_at: 0}),
                     commit: (success, payload) => {
                         // Use RECEIVED_POSTS to clear pending and sending posts
                         const actions = [{
@@ -206,7 +206,7 @@ export function createPostImmediately(post, files = []) {
         });
 
         try {
-            const created = await Client4.createPost({...newPost, message: encryptedMessage, create_at: 0});
+            const created = await Client4.createPost({...newPost, message: encryptedMessage, props: {encrypted: true}, create_at: 0});
             newPost.id = created.id;
         } catch (error) {
             forceLogoutIfNecessary(error, dispatch, getState);
@@ -296,7 +296,7 @@ export function editPost(post) {
 
         let data = null;
         try {
-            data = await Client4.patchPost({...post, message: encryptedMessage});
+            data = await Client4.patchPost({...post, message: encryptedMessage, props: {encrypted: true}});
             data.message = post.message;
         } catch (error) {
             forceLogoutIfNecessary(error, dispatch, getState);
