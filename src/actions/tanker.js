@@ -167,6 +167,33 @@ export async function decodePost(getState: GetStateFunc, post: Post) {
     }
 }
 
+export async function encryptFile(dispatch: DispatchFunc, getState: GetStateFunc, file: File, channelId: string) {
+    const state = getState();
+    const tankerState = state.entities.general.tanker;
+    if (!tankerState.enabled) {
+        return file;
+    }
+    const tanker = tankerState.instance;
+    let channel = state.entities.channels.channels[channelId];
+
+    if (!channel.tanker_group_id) {
+        channel = await updateChannelGroup(getState, channel, []);
+        await updateChannel(channel)(dispatch, getState);
+    }
+
+    return tanker.encryptData(file, {shareWithGroups: [channel.tanker_group_id]});
+}
+
+export async function decryptFile(dispatch: DispatchFunc, getState: GetStateFunc, file: File) {
+    const tankerState = getState().entities.general.tanker;
+    if (!tankerState.enabled) {
+        return file;
+    }
+    const tanker = tankerState.instance;
+
+    return tanker.decryptData(file);
+}
+
 export async function closeTanker(getState: GetStateFunc) {
     const tankerState = getState().entities.general.tanker;
     if (!tankerState.enabled) {
