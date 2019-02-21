@@ -14,6 +14,8 @@ import {forceLogoutIfNecessary} from './helpers';
 import {logError} from './errors';
 import {getProfilesAndStatusesForPosts} from './posts';
 
+import {filterPostsWithParams} from './search_utils';
+
 const WEBAPP_SEARCH_PER_PAGE = 20;
 
 export function getMissingChannelsFromPosts(posts) {
@@ -44,9 +46,15 @@ export function searchPostsWithParams(teamId, params) {
             isGettingMore,
         });
 
+        const entities = getState().entities;
         let posts;
         try {
-            posts = await Client4.searchPostsWithParams(teamId, params);
+            if (entities.general.tanker.enabled) {
+                const localPostsById = entities.posts.posts;
+                posts = filterPostsWithParams(localPostsById, params);
+            } else {
+                posts = await Client4.searchPostsWithParams(teamId, params);
+            }
 
             await Promise.all([
                 getProfilesAndStatusesForPosts(posts.posts, dispatch, getState),
