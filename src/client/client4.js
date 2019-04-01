@@ -215,6 +215,9 @@ export default class Client4 {
     getTankerIdentityRoute() {
         return `${this.getBaseRoute()}/tankeridentity`;
     }
+    getTankerPublicIdentitiesRoute() {
+        return `${this.getBaseRoute()}/tankerpublicidentities`;
+    }
 
     getEmojisRoute() {
         return `${this.getBaseRoute()}/emoji`;
@@ -1985,6 +1988,13 @@ export default class Client4 {
             {method: 'get'}
         );
     };
+
+    getTankerPublicIdentities = async (userIds) => {
+        return this.doFetch(
+            `${this.getTankerPublicIdentitiesRoute()}`,
+            {method: 'post', body: JSON.stringify(userIds)}
+        );
+    }
 
     // Emoji Routes
 

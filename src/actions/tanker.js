@@ -27,7 +27,7 @@ async function handleTankerError(dispatch: DispatchFunc, getState: GetStateFunc,
     ]), getState);
 }
 
-export function openTanker(email: ?string, password: ?string): ActionFunc {
+export function openTanker(email: ?string, password: ?string, validationCode: ?string): ActionFunc {
     return async (dispatch: DispatchFunc, getState: GetStateFunc) => {
         const tankerState = getState().entities.general.tanker;
         if (!tankerState.enabled) {
@@ -44,6 +44,11 @@ export function openTanker(email: ?string, password: ?string): ActionFunc {
                 }
                 await tanker.registerIdentity({passphrase: password});
                 await tanker.updateVerificationMethod({email, verificationCode: ''});
+                try {
+                    await tanker.claimProvisionalIdentity(ids.provisional_identity, validationCode);
+                } catch (e) {
+                    console.error(e); // eslint-disable-line no-console
+                }
             } else if (res === Tanker.statuses.IDENTITY_VERIFICATION_NEEDED) {
                 await tanker.verifyIdentity({passphrase: password});
             }

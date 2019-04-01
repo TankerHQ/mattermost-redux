@@ -14,7 +14,7 @@ import {getAllCustomEmojis} from 'actions/emojis';
 import {getClientConfig} from 'actions/general';
 import {getMyTeams, getMyTeamMembers, getMyTeamUnreads} from 'actions/teams';
 import {loadRolesIfNeeded} from 'actions/roles';
-import {openTanker, closeTanker, unlockAndUpdatePassword, updateTankerPassword, updateOpenChannels} from 'actions/tanker';
+import {openTanker, closeTanker, unlockAndUpdatePassword, updateTankerPassword} from 'actions/tanker';
 
 import {
     getUserIdFromChannelName,
@@ -108,7 +108,7 @@ export function login(loginId: string, password: string, mfaToken: string = '', 
     };
 }
 
-export function loginById(id: string, password: string, mfaToken: string = '', isAccountCreation: boolean = false): ActionFunc {
+export function loginById(id: string, password: string, mfaToken: string = '', validationCode: ?string): ActionFunc {
     return async (dispatch: DispatchFunc, getState: GetStateFunc) => {
         dispatch({type: UserTypes.LOGIN_REQUEST, data: null}, getState);
 
@@ -128,11 +128,11 @@ export function loginById(id: string, password: string, mfaToken: string = '', i
             return {error};
         }
 
-        return completeLogin(data, password, isAccountCreation)(dispatch, getState);
+        return completeLogin(data, password, validationCode)(dispatch, getState);
     };
 }
 
-function completeLogin(data: UserProfile, password: string, isAccountCreation: boolean = false): ActionFunc {
+function completeLogin(data: UserProfile, password: string, validationCode: ?string): ActionFunc {
     return async (dispatch: DispatchFunc, getState: GetStateFunc) => {
         dispatch({
             type: UserTypes.RECEIVED_ME,
@@ -169,7 +169,7 @@ function completeLogin(data: UserProfile, password: string, isAccountCreation: b
             dispatch(getMyPreferences()),
             dispatch(getMyTeams()),
             dispatch(getClientConfig()),
-            dispatch(openTanker(data.email, password)),
+            dispatch(openTanker(data.email, password, validationCode)),
         ];
 
         const serverVersion = Client4.getServerVersion();
@@ -179,9 +179,6 @@ function completeLogin(data: UserProfile, password: string, isAccountCreation: b
 
         try {
             await Promise.all(promises);
-            if (isAccountCreation) {
-                await updateOpenChannels(getState);
-            }
         } catch (error) {
             dispatch(batchActions([
                 {type: UserTypes.LOGIN_FAILURE, error},

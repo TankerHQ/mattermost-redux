@@ -15,7 +15,7 @@ import {logError} from './errors';
 import {bindClientFunc, forceLogoutIfNecessary} from './helpers';
 import {getMissingProfilesByIds} from './users';
 import {loadRolesIfNeeded} from './roles';
-import {createGroup, updateChannelGroup} from './tanker';
+import {createGroup, addMemberToChannelGroup} from './tanker';
 
 import type {ActionFunc, DispatchFunc, GetStateFunc} from 'types/actions';
 import type {Channel, ChannelNotifyProps, ChannelMembership} from 'types/channels';
@@ -616,22 +616,6 @@ export function leaveChannel(channelId: string): ActionFunc {
     };
 }
 
-async function updateChannelMembers(dispatch: DispatchFunc, getState: GetStateFunc, channelId: string, toAddUserIds: Array<string>) {
-    if (!getState().entities.general.tanker.enabled) {
-        return;
-    }
-
-    try {
-        const channel = await Client4.getChannel(channelId);
-        await getChannelMembers(channel.id)(dispatch, getState);
-        var updatedchannel = await updateChannelGroup(getState, channel, toAddUserIds);
-        await updateChannel(updatedchannel);
-    } catch (error) {
-        forceLogoutIfNecessary(error, dispatch, getState);
-        dispatch(logError(error));
-    }
-}
-
 export function joinChannel(userId: string, teamId: string, channelId: string, channelName: string): ActionFunc {
     return async (dispatch, getState) => {
         let member: ?ChannelMembership;
@@ -644,9 +628,6 @@ export function joinChannel(userId: string, teamId: string, channelId: string, c
                 channel = await Client4.getChannelByName(teamId, channelName, true);
                 if ((channel.type === General.GM_CHANNEL) || (channel.type === General.DM_CHANNEL)) {
                     member = await Client4.getChannelMember(channel.id, userId);
-                } else {
-                    await updateChannelMembers(dispatch, getState, channel.id, [userId]);
-                    member = await Client4.addToChannel(userId, channel.id);
                 }
             }
         } catch (error) {
@@ -993,7 +974,7 @@ export function getChannelStats(channelId: string): ActionFunc {
 
 export function addChannelMember(channelId: string, userId: string, postRootId: string = ''): ActionFunc {
     return async (dispatch, getState) => {
-        await updateChannelMembers(dispatch, getState, channelId, [userId]);
+        await addMemberToChannelGroup(dispatch, getState, channelId, userId);
 
         let member;
         try {

@@ -13,6 +13,8 @@ import {bindClientFunc, forceLogoutIfNecessary} from './helpers';
 import {getProfilesByIds, getStatusesByIds} from './users';
 import {loadRolesIfNeeded} from './roles';
 
+import {createTeamChannelsGroups, inviteToTeamChannels} from './tanker';
+
 import type {GetStateFunc, DispatchFunc, ActionFunc, ActionResult} from 'types/actions';
 import type {Team} from 'types/teams';
 import {isCompatibleWithJoinViewTeamPermissions} from 'selectors/entities/general';
@@ -122,6 +124,7 @@ export function createTeam(team: Team): ActionFunc {
         let created;
         try {
             created = await Client4.createTeam(team);
+            await createTeamChannelsGroups(dispatch, getState, created.id);
         } catch (error) {
             forceLogoutIfNecessary(error, dispatch, getState);
             dispatch(logError(error));
@@ -345,6 +348,7 @@ export function addUserToTeam(teamId: string, userId: string): ActionFunc {
         let member;
         try {
             member = await Client4.addToTeam(teamId, userId);
+            await inviteToTeamChannels(getState, [userId], []);
         } catch (error) {
             forceLogoutIfNecessary(error, dispatch, getState);
             dispatch(logError(error));
@@ -371,6 +375,7 @@ export function addUsersToTeam(teamId: string, userIds: Array<string>): ActionFu
         let members;
         try {
             members = await Client4.addUsersToTeam(teamId, userIds);
+            await inviteToTeamChannels(getState, userIds, []);
         } catch (error) {
             forceLogoutIfNecessary(error, dispatch, getState);
             dispatch(logError(error));
@@ -470,13 +475,18 @@ export function updateTeamMemberRoles(teamId: string, userId: string, roles: str
 }
 
 export function sendEmailInvitesToTeam(teamId: string, emails: Array<string>): ActionFunc {
-    return bindClientFunc({
-        clientFunc: Client4.sendEmailInvitesToTeam,
-        params: [
-            teamId,
-            emails,
-        ],
-    });
+    return async (dispatch: DispatchFunc, getState: GetStateFunc) => {
+        try {
+            const publicProvisionalIdentities = await Client4.sendEmailInvitesToTeam(teamId, emails);
+            await inviteToTeamChannels(getState, [], publicProvisionalIdentities);
+        } catch (error) {
+            forceLogoutIfNecessary(error, dispatch, getState);
+            dispatch(logError(error));
+            return {error};
+        }
+
+        return {data: true};
+    };
 }
 
 export function getTeamInviteInfo(inviteId: string): ActionFunc {
