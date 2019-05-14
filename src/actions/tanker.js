@@ -10,7 +10,6 @@ import {Client4} from 'client';
 import {UserTypes} from 'action_types';
 
 import type {ActionFunc, DispatchFunc, GetStateFunc} from 'types/actions';
-import type {Channel} from 'types/channels';
 import type {Post} from 'types/posts';
 
 export const tankerConfig = {
@@ -28,7 +27,7 @@ async function handleTankerError(dispatch: DispatchFunc, getState: GetStateFunc,
     ]), getState);
 }
 
-export function openTanker(password: ?string): ActionFunc {
+export function openTanker(email: ?string, password: ?string): ActionFunc {
     return async (dispatch: DispatchFunc, getState: GetStateFunc) => {
         const tankerState = getState().entities.general.tanker;
         if (!tankerState.enabled) {
@@ -40,7 +39,11 @@ export function openTanker(password: ?string): ActionFunc {
             const ids = await Client4.getTankerIdentity();
             const res = await tanker.start(ids.tanker_identity);
             if (res === Tanker.statuses.IDENTITY_REGISTRATION_NEEDED) {
+                if (!email) {
+                    handleTankerError(dispatch, getState, tanker, 'Cannot sign up without email');
+                }
                 await tanker.registerIdentity({passphrase: password});
+                await tanker.updateVerificationMethod({email, verificationCode: ''});
             } else if (res === Tanker.statuses.IDENTITY_VERIFICATION_NEEDED) {
                 await tanker.verifyIdentity({passphrase: password});
             }
@@ -201,4 +204,18 @@ export async function updateTankerPassword(getState: GetStateFunc, newPassword: 
     }
     const tanker = tankerState.instance;
     await tanker.updateVerificationMethod({passphrase: newPassword});
+}
+
+export async function unlockAndUpdatePassword(getState: GetStateFunc, email: string, tankerIdentity: string, verificationCode: string, newPassword: string) {
+    const tankerState = getState().entities.general.tanker;
+    if (!tankerState.enabled) {
+        return;
+    }
+    const tanker = tankerState.instance;
+    const status = await tanker.start(tankerIdentity);
+    if (status === Tanker.statuses.IDENTITY_VERIFICATION_NEEDED) {
+        await tanker.verifyIdentity({email, verificationCode});
+    }
+    await tanker.updateVerificationMethod({passphrase: newPassword});
+    await tanker.stop();
 }

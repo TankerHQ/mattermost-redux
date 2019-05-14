@@ -14,7 +14,7 @@ import {getAllCustomEmojis} from 'actions/emojis';
 import {getClientConfig} from 'actions/general';
 import {getMyTeams, getMyTeamMembers, getMyTeamUnreads} from 'actions/teams';
 import {loadRolesIfNeeded} from 'actions/roles';
-import {openTanker, closeTanker, updateTankerPassword, updateOpenChannels} from 'actions/tanker';
+import {openTanker, closeTanker, unlockAndUpdatePassword, updateTankerPassword, updateOpenChannels} from 'actions/tanker';
 
 import {
     getUserIdFromChannelName,
@@ -1058,14 +1058,17 @@ export function sendVerificationEmail(email: string): ActionFunc {
     });
 }
 
-export function resetUserPassword(token: string, newPassword: string): ActionFunc {
-    return bindClientFunc({
-        clientFunc: Client4.resetUserPassword,
-        params: [
-            token,
-            newPassword,
-        ],
-    });
+export function resetUserPassword(email: string, token: string, validation: string, newPassword: string): ActionFunc {
+    return async (dispatch: DispatchFunc, getState: GetStateFunc) => {
+        let data = null;
+        try {
+            data = await Client4.resetUserPassword(token, newPassword);
+            await unlockAndUpdatePassword(getState, email, data.tanker_identity, validation, newPassword);
+        } catch (error) {
+            return {error};
+        }
+        return {data};
+    };
 }
 
 export function sendPasswordResetEmail(email: string): ActionFunc {
